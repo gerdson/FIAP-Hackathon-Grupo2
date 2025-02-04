@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Webcam Demo</title>
+    <style>
+        body { font-family: sans-serif; }
+        .container { border: 2px solid black; padding: 3px; width: 100%; max-width: 600px; }
+        #video { display: block; width: 100%; }
+        #overlay-image { position: absolute; z-index: 1; }
+        .instructions { color: red; font-weight: bold; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div id="model-out"><span>Status: </span><span id="label">No data</span></div>
+        <video id="video" playsinline></video>
+        <img id="overlay-image" style="display:none" />
+        <div class="instructions">
+            Quando terminar, clique aqui ou no video para parar esta demo
+        </div>
+    </div>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.0.1/socket.io.js"></script>
+    <script>
+        const IMG_SHAPE = [640, 480];
+        const IMG_QUALITY = 0.8;
+
+        var video;
+        var div = null;
+        var stream;
+        var captureCanvas;
+        var imgElement;
+        var labelElement;
+        var overlayImage;
+        var shutdown = false;
+        var socket = io.connect('http://localhost:5000');
+       
+        function removeDom() {
+            if (stream && stream.getVideoTracks){
+                stream.getVideoTracks()[0].stop();
+            }
+            if (video){
+               video.remove();
+            }
+            
+            div.remove();
+            video = null;
+            div = null;
+            stream = null;
+            imgElement = null;
+            captureCanvas = null;
+            labelElement = null;
+            overlayImage = null;
+        }
+
+         async function createDom() {
+             if (div !== null) {
+                 return stream;
+             }
+ 
+             div = document.querySelector('.container');
+             
+             const modelOut = document.getElementById('model-out');
+             labelElement = document.getElementById('label');
+             labelElement.innerText = 'No data';
+             labelElement.style.fontWeight = 'bold';
+             
+             video = document.getElementById('video');
+             video.width = div.clientWidth - 6;
+             video.onclick = () => { shutdown = true; };
+             stream = await navigator.mediaDevices.getUserMedia(
+                 {video: { facingMode: "environment"}});
+             video.srcObject = stream;
+             await video.play();
+ 
+            overlayImage = document.getElementById('overlay-image');
+             overlayImage.onclick = () => { shutdown = true; };
+ 
+             const instruction = document.querySelector('.instructions');
+             instruction.onclick = () => { shutdown = true; };
+ 
+             captureCanvas = document.createElement('canvas');
+             captureCanvas.width = IMG_SHAPE[0];
+             captureCanvas.height = IMG_SHAPE[1];
+ 
+             return stream;
+         }
+
+        async function takePhoto(label, imgData) {
+            if (shutdown) {
+                removeDom();
+                shutdown = false;
+                return '';
+            }
+            
+            await createDom();
+            
+           
+             if (label != "") {
+                labelElement.innerHTML = label;
+            }
+
+            if (imgData != "") {
+                var videoRect = video.getClientRects()[0];
+                 overlayImage.style.display = 'block';
+                overlayImage.style.top = videoRect.top + "px";
+                overlayImage.style.left = videoRect.left + "px";
+                overlayImage.style.width = videoRect.width + "px";
+                overlayImage.style.height = videoRect.height + "px";
+                overlayImage.src = imgData;
+            }else{
+                 overlayImage.style.display = 'none';
+            }
+
+
+            captureCanvas.getContext('2d').drawImage(video, 0, 0, IMG_SHAPE[0], IMG_SHAPE[1]);
+            var result = captureCanvas.toDataURL('image/jpeg', IMG_QUALITY);
+            return result;
+
+        }
+
+        let imgData = '';
+        
+         async function processFrame() {
+            if (shutdown) {
+                return;
+            }
+        
+            try {
+                var captured_img = await takePhoto('Capturing...', imgData)
+                
+                if (captured_img != '') {
+                    socket.emit('take_photo', {'label': 'Capturing...', 'imgData': captured_img})
+                }
+            }catch(e)
+            {
+                console.error(e);
+            }
+        
+            if(!shutdown)
+                 requestAnimationFrame(processFrame);
+            
+        }
+         socket.on('capture_complete', function(data) {
+              labelElement.innerHTML = data.label;
+              imgData = data.imgData;
+            
+          })
+         socket.on('update_image', function(data) {
+              labelElement.innerHTML = data.label;
+              imgData = data.imgData;
+          })
+         
+        processFrame()
+    </script>
+</body>
+</html>

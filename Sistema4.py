@@ -91,7 +91,7 @@ def enviar_notificacao(classe_id: int, objeto_id: int) -> None:
 # ====================================================
 def processar_imagem(caminho_imagem: str) -> Tuple[np.ndarray, str]:
     """Processa imagem estática e retorna resultado anotado"""
-    
+
     print('Processando imagem...')
 
     modelo = inicializar_modelo()
@@ -109,6 +109,8 @@ def processar_imagem(caminho_imagem: str) -> Tuple[np.ndarray, str]:
 # ====================================================
 # MÓDULO DE PROCESSAMENTO DE VÍDEO/WEBCAM
 # ====================================================
+monitorando_webcam = False # Variável de estado global para controle do loop da webcam
+
 def processar_video(fonte_video: Any, webcam: bool = False):
     """Processa fluxo de vídeo com 4 camadas de verificação"""
 
@@ -195,29 +197,38 @@ def processar_video(fonte_video: Any, webcam: bool = False):
 
     cap.release()
 
-def processar_video_webcam(frame):
-    """Processa fluxo de vídeo da webcam com 4 camadas de verificação"""
+def processar_video_webcam(iniciar_parar):
+    """
+    Função que processa o vídeo da webcam e alterna entre iniciar/parar o monitoramento.
+    """
+    global monitorando_webcam
 
-    print('Processando video da webcam...')
+    if iniciar_parar: # Se o botão foi clicado (valor é True)
+        monitorando_webcam = not monitorando_webcam # Inverte o estado de monitoramento
 
-    modelo_detecao = inicializar_modelo() # Usar modelo_detecao para detecção/rastreamento
+    if not monitorando_webcam: # Se não estiver monitorando, retorna mensagens de parado
+        return None, "Monitoramento parado", "Iniciar Monitoramento" # Retorna texto do botão para 'Iniciar'
 
-    # Estado global para rastreamento
-    estado = {
-        "ids_notificados": defaultdict(dict),  # {classe: {id: último_tempo}}
-        "deteccoes_recentes": defaultdict(list),  # {classe: [(caixa, tempo)]}
+    # Inicialização da captura de vídeo e modelo DEVE estar dentro da função para reiniciar a captura a cada vez que inicia
+    cap = cv2.VideoCapture(FONTE_WEBCAM)
+    if not cap.isOpened():
+        return None, "Erro ao abrir a webcam", "Iniciar Monitoramento"
+
+    modelo_detecao = inicializar_modelo()
+    estado_webcam = { # Estado local para cada chamada da função
+        "ids_notificados": defaultdict(dict),
+        "deteccoes_recentes": defaultdict(list),
         "historico_embeddings": defaultdict(lambda: deque(maxlen=HISTORICO_EMBEDDINGS))
     }
 
-    #cap = cv2.VideoCapture(FONTE_WEBCAM)
-    
-    #while cap.isOpened():
-    #    sucesso, frame = cap.read()
-    #    if not sucesso:
-    #        break
+
+    sucesso, frame = cap.read()
+    cap.release() # Libera a webcam imediatamente após ler o frame para não bloquear o acesso futuro
+    if not sucesso:
+        return None, "Erro ao ler frame da webcam", "Iniciar Monitoramento"
 
     tempo_atual = time.time()
-    resultados = modelo_detecao.track(frame, persist=True, verbose=False, tracker='bytetrack.yaml') # Usar ByteTrack e modelo_detecao
+    resultados = modelo_detecao.track(frame, persist=True, verbose=False, tracker='bytetrack.yaml')
 
     mensagem_status = ""
 
@@ -231,7 +242,7 @@ def processar_video_webcam(frame):
                 continue
 
             # 1ª Verificação: Cooldown por ID
-            ultima_notificacao = estado["ids_notificados"][classe].get(obj_id, 0)
+            ultima_notificacao = estado_webcam["ids_notificados"][classe].get(obj_id, 0) # Usar estado_webcam
             if (tempo_atual - ultima_notificacao) < CONFIG_CLASSES[classe]["cooldown"]:
                 continue
 
@@ -239,14 +250,14 @@ def processar_video_webcam(frame):
             sobreposicao = any(
                 calcular_iou(caixa, caixa_antiga) > IOU_THRESHOLD
                 and (tempo_atual - tempo_antigo) < CONFIG_CLASSES[classe]["cooldown"]
-                for caixa_antiga, tempo_antigo in estado["deteccoes_recentes"][classe]
+                for caixa_antiga, tempo_antigo in estado_webcam["deteccoes_recentes"][classe] # Usar estado_webcam
             )
 
             # 3ª Verificação: Similaridade de Embeddings
-            embedding = extrair_embedding(MODELO_EMBEDDING, frame, caixa) # Usar MODELO_EMBEDDING para extrair embeddings
+            embedding = extrair_embedding(MODELO_EMBEDDING, frame, caixa)
             similaridade = verificar_similaridade(
                 embedding,
-                estado["historico_embeddings"][obj_id]
+                estado_webcam["historico_embeddings"][obj_id] # Usar estado_webcam
             )
 
             # 4ª Verificação: Decisão Final
@@ -254,31 +265,31 @@ def processar_video_webcam(frame):
                 enviar_notificacao(classe, obj_id)
                 mensagem_status = f"{CONFIG_CLASSES[classe]['nome'].upper()} detectado!"
 
-                # Atualizar estado
-                estado["ids_notificados"][classe][obj_id] = tempo_atual
-                estado["deteccoes_recentes"][classe].append((caixa, tempo_atual))
-                estado["historico_embeddings"][obj_id].append(embedding)
+                # Atualizar estado (local para esta chamada)
+                estado_webcam["ids_notificados"][classe][obj_id] = tempo_atual
+                estado_webcam["deteccoes_recentes"][classe].append((caixa, tempo_atual))
+                estado_webcam["historico_embeddings"][obj_id].append(embedding)
 
-    # Manutenção do estado
+    # Manutenção do estado (local para esta chamada - não persiste entre chamadas a menos que movido para fora da função)
     for classe in CONFIG_CLASSES:
         # Limpar IDs inativos
-        estado["ids_notificados"][classe] = {
-            id: tempo for id, tempo in estado["ids_notificados"][classe].items()
+        estado_webcam["ids_notificados"][classe] = { # Usar estado_webcam
+            id: tempo for id, tempo in estado_webcam["ids_notificados"][classe].items()
             if (tempo_atual - tempo) < CONFIG_CLASSES[classe]["cooldown"]
         }
 
         # Limpar detecções antigas
-        estado["deteccoes_recentes"][classe] = [
-            (c, t) for c, t in estado["deteccoes_recentes"][classe]
+        estado_webcam["deteccoes_recentes"][classe] = [ # Usar estado_webcam
+            (c, t) for c, t in estado_webcam["deteccoes_recentes"][classe]
             if (tempo_atual - t) < CONFIG_CLASSES[classe]["cooldown"]
         ]
 
-    # Gerar saída
-    frame_anotado = resultados[0].plot() if resultados and resultados[0].plot() is not None else frame # Anotar o frame (se resultados e plot() não forem None)
-    #print(f'Frame anotado {frame_anotado}')
-    return frame_anotado, mensagem_status
+    frame_anotado = resultados[0].plot() if resultados and resultados[0].plot() is not None else frame
 
-    #cap.release()
+    if monitorando_webcam:
+        return frame_anotado, mensagem_status, "Parar Monitoramento" # Retorna texto do botão para 'Parar'
+    else:
+        return None, "Monitoramento parado", "Iniciar Monitoramento" # Retorna texto do botão para 'Iniciar'
 
 
 # ====================================================
@@ -322,18 +333,20 @@ with gr.Blocks(title="Sistema de Segurança Avançado") as interface:
         outputs=[saida_video, texto_video]
     )
 
-    global monitoramento
-    monitoramento = 0
-    def processar_webcam(monitoramento):
-        monitoramento+=1
-        while(True):
-            if(monitoramento % 2 == 0):
-                break
-            processar_video(None, True)
-
-    botao_webcam.click(
-        processar_webcam(monitoramento),
-        outputs=[saida_webcam, texto_webcam]
+    botao_webcam_output = botao_webcam.click(
+        processar_video_webcam,
+        inputs=botao_webcam, # Passa o próprio botão como input (valor booleano do clique)
+        outputs=[saida_webcam, texto_webcam, botao_webcam] # Inclui o botão como output
     )
-    
+
+    # Para que o loop continue executando, precisamos agendar a próxima chamada de processar_video_webcam
+    # Usando after para chamar processar_video_webcam novamente após um pequeno delay (simulando um loop)
+    #botao_webcam_output.then(
+    #    lambda iniciar_parar: processar_video_webcam(False) if monitorando_webcam else (None, None, None), # Chama novamente se monitorando
+    #    inputs=botao_webcam_output, # Usamos o output do botão como input para verificar o estado
+    #    outputs=[saida_webcam, texto_webcam, botao_webcam],
+    #    every=0.1 # Ajuste o delay conforme necessário
+    #)
+
+
 interface.launch(share=False)
