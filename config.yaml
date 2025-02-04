@@ -1,9 +1,8 @@
-path: /home/gerdson/projetos/FIAP-Hackathon-Grupo2/datasets/cortantes_armas # dataset root dir
+path: /home/gerdson/projetos/FIAP-Hackathon-Grupo2/datasets/cortantes # dataset root dir
 train: train  # train images (relative to 'path')
 val: valid  # val images (relative to 'path')
 #test: test  # test images (relative to 'path')
 
 # Classes
 names:
-  0: cortante
-  1: arma    
+  0: cortante     

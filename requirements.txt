@@ -1,5 +1,6 @@
 ultralytics
-gradio
+streamlit
+lap
 opencv-python
 numpy
 torch
