@@ -1,6 +1,6 @@
-ultralytics
-streamlit
-lap
-opencv-python
-numpy
-torch
+ultralytics==8.3.70
+streamlit==1.41.1
+lap==0.5.12
+opencv-python==4.11.0.86
+numpy==2.1.1
+torch==2.6.0

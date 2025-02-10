@@ -1,12 +1,14 @@
 import cv2
-from PIL import Image
 import time
 import torch
 import numpy as np
-import streamlit as st  # Alteração: Importar Streamlit
+import streamlit as st
 from collections import defaultdict, deque
 from ultralytics import YOLO
 from typing import Tuple, Any
+import smtplib
+import email.message
+
 
 # ====================================================
 # CONFIGURAÇÕES GLOBAIS
@@ -14,24 +16,18 @@ from typing import Tuple, Any
 CONFIG_CLASSES = {
     0: {"nome": "cortante", "cooldown": 30, "cor": (0, 0, 255)}
 }
-#CONFIG_CLASSES = {
-#    0: {"nome": "knife", "cooldown": 30, "cor": (0, 0, 255)},
-#    1: {"nome": "scissors", "cooldown": 30, "cor": (255, 0, 0)},
-#}
+
 IOU_THRESHOLD = 0.3
 SIMILARIDADE_THRESHOLD = 0.85  # Similaridade mínima entre embeddings
 HISTORICO_EMBEDDINGS = 5  # Número de embeddings armazenados por ID
-MODELO_CAMINHO = "./runs/detect/train8/weights/best.pt"
-#MODELO_CAMINHO = "yolov8m-worldv2.pt"
+MODELO_CAMINHO = "./modelo/best.pt"
 FONTE_WEBCAM = 0  # 0 para webcam padrão
 
 # Carregar modelos separados para detecção/rastreamento e embeddings
 MODELO_DETECCAO = YOLO(MODELO_CAMINHO)
 MODELO_EMBEDDING = YOLO(MODELO_CAMINHO)
-#MODELO_DETECCAO.set_classes(["knife", "scissors"])
-#MODELO_EMBEDDING.set_classes(["knife", "scissors"])
-# MODELO_DETECCAO.set_classes(["sharp object"])
-# MODELO_EMBEDDING.set_classes(["sharp object"])
+
+EMAIL_DESTINATARIO = ''
 
 
 # ====================================================
@@ -101,8 +97,30 @@ def verificar_similaridade(embedding_atual: torch.Tensor, historico: deque) -> b
 
 def enviar_notificacao(classe_id: int, objeto_id: int) -> None:
     """Emite alerta visual no console para objetos detectados"""
+
     nome_classe = CONFIG_CLASSES[classe_id]["nome"].upper()
+    enviar_email(nome_classe, objeto_id)
     print(f"\033[91m[ALERTA] {nome_classe} detectado! (ID: {objeto_id})\033[0m")
+    
+def enviar_email(nome_classe: str, objeto_id: int):  
+    corpo_email = """
+        f"\033[91m[ALERTA] {nome_classe} detectado! (ID: {objeto_id})\033[0m"
+    """
+
+    msg = email.message.Message()
+    msg['Subject'] = "Alerta de Objeto Cortante"
+    msg['From'] = 'remetente'
+    msg['To'] = EMAIL_DESTINATARIO
+    password = 'senha' 
+    msg.add_header('Content-Type', 'text/html')
+    msg.set_payload(corpo_email)
+
+    s = smtplib.SMTP('smtp.gmail.com: 587')
+    s.starttls()
+    # Login Credentials for sending the mail
+    s.login(msg['From'], password)
+    s.sendmail(msg['From'], [msg['To']], msg.as_string().encode('utf-8'))
+    print('Email enviado')
 
 
 # ====================================================
@@ -111,16 +129,17 @@ def enviar_notificacao(classe_id: int, objeto_id: int) -> None:
 def processar_imagem(caminho_imagem: str) -> Tuple[np.ndarray, str]:
     """Processa imagem estática e retorna resultado anotado"""
     modelo = inicializar_modelo()
-    frame = cv2.imread(caminho_imagem)
-    frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-    resultados = modelo.predict(frame, verbose=False)
+    resultados = modelo.predict(caminho_imagem, verbose=False)
 
     mensagem = "Nenhum objeto detectado"
     if len(resultados[0].boxes.cls) > 0:
         mensagem = "Objeto(s) perigoso(s) detectado(s)!"
         frame_anotado = resultados[0].plot()
+        frame_anotado = cv2.cvtColor(frame_anotado, cv2.COLOR_BGR2RGB)
         return frame_anotado, mensagem
     else:
+        frame = cv2.imread(caminho_imagem)
+        frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
         return frame, mensagem
 
 
@@ -147,9 +166,7 @@ def processar_video(fonte_video: Any, webcam: bool = False):
             break
 
         tempo_atual = time.time()
-        resultados = modelo_detecao.track(
-            frame, persist=True, verbose=False, tracker="bytetrack.yaml"
-        )  # Usar ByteTrack e modelo_detecao
+        resultados = modelo_detecao.track(frame, persist=True, verbose=False, tracker="bytetrack.yaml")  # Usar ByteTrack e modelo_detecao
 
         mensagem_status = ""
 
@@ -190,9 +207,7 @@ def processar_video(fonte_video: Any, webcam: bool = False):
 
                     # 3ª Verificação: Similaridade de Embeddings
                     #print("Terceira verificacao...")
-                    embedding = extrair_embedding(
-                        MODELO_EMBEDDING, frame, caixa
-                    )  # Usar MODELO_EMBEDDING para extrair embeddings
+                    embedding = extrair_embedding(MODELO_EMBEDDING, frame, caixa)  # Usar MODELO_EMBEDDING para extrair embeddings
                     similaridade = verificar_similaridade(
                         embedding, estado["historico_embeddings"][obj_id]
                     )
@@ -241,9 +256,7 @@ def processar_video(fonte_video: Any, webcam: bool = False):
             and resultados[0].plot() is not None
             else frame
         )  # Anotar o frame (se resultados e plot() não forem None)
-        frame_anotado_rgb = cv2.cvtColor(
-            frame_anotado, cv2.COLOR_BGR2RGB
-        )  # Converter para RGB para Streamlit
+        frame_anotado_rgb = cv2.cvtColor(frame_anotado, cv2.COLOR_BGR2RGB)  # Converter para RGB para Streamlit
         yield frame_anotado_rgb, mensagem_status
 
     cap.release()
@@ -252,36 +265,34 @@ def processar_video(fonte_video: Any, webcam: bool = False):
 # ====================================================
 # INTERFACE GRÁFICA (STREAMLIT)
 # ====================================================
-st.set_page_config(page_title="Sistema de Segurança Avançado")  # Alteração: page_title
-st.markdown("# 🔪🔫 Sistema de Detecção de Objetos Perigosos")  # Alteração: Markdown
+st.set_page_config(page_title="Sistema de Segurança Avançado")
+st.markdown("# 🔪🔫 Sistema de Detecção de Objetos Cortantes") 
 
 tab_imagem, tab_video, tab_webcam = st.tabs(
     ["📷 Imagem", "🎥 Vídeo", "🌐 Webcam (Tempo Real)"]
-)  # Alteração: Tabs - Adicionada aba Webcam
+)
 
 # Aba de Imagem
 with tab_imagem:
     entrada_imagem = st.file_uploader(
         "Carregar Imagem", type=["png", "jpg", "jpeg"]
-    )  # Alteração: File uploader
-    botao_imagem = st.button("Analisar Imagem")  # Alteração: Botão
-    saida_imagem = st.empty()  # Alteração: Placeholder para imagem
-    texto_imagem = st.empty()  # Alteração: Placeholder para texto
+    )  
+    botao_imagem = st.button("Analisar Imagem") 
+    saida_imagem = st.empty()  
+    texto_imagem = st.empty()  
 
     if botao_imagem:
         if entrada_imagem is not None:
             caminho_temporario_imagem = "temp_image.jpg"
             with open(caminho_temporario_imagem, "wb") as f:
                 f.write(entrada_imagem.read())
-            frame_processado, mensagem_detecao = processar_imagem(
-                caminho_temporario_imagem
-            )
+            frame_processado, mensagem_detecao = processar_imagem(caminho_temporario_imagem)
             saida_imagem.image(
                 frame_processado,
                 caption="Resultado da Análise",
                 use_container_width=True,
-            )  # Alteração: Exibir imagem, use_container_width
-            texto_imagem.text(mensagem_detecao)  # Alteração: Exibir texto
+            )
+            texto_imagem.text(mensagem_detecao)
         else:
             texto_imagem.text("Por favor, carregue uma imagem.")
 
@@ -289,10 +300,10 @@ with tab_imagem:
 with tab_video:
     entrada_video = st.file_uploader(
         "Carregar Vídeo", type=["mp4", "avi", "mov"]
-    )  # Alteração: Video uploader
-    botao_video = st.button("Iniciar Análise de Vídeo")  # Alteração: Botão
-    saida_video = st.empty()  # Alteração: Placeholder para vídeo/imagens em tempo real
-    texto_video = st.empty()  # Alteração: Placeholder para texto de alerta
+    )  
+    botao_video = st.button("Iniciar Análise de Vídeo")
+    saida_video = st.empty()
+    texto_video = st.empty()
 
     if botao_video:
         if entrada_video is not None:
@@ -307,19 +318,19 @@ with tab_video:
                     channels="RGB",
                     caption="Visualização em Tempo Real",
                     use_container_width=True,
-                )  # Alteração: Exibir frame de vídeo, use_container_width
-                texto_video.text(mensagem_status)  # Alteração: Exibir texto de alerta
+                )  
+                texto_video.text(mensagem_status)
         else:
             texto_video.text("Por favor, carregue um vídeo.")
 
 # Aba da Webcam (Tempo Real)
 with tab_webcam:
-    status_webcam = st.empty()  # Placeholder para status da webcam
-    saida_webcam = st.empty()  # Placeholder para vídeo da webcam
-    texto_webcam = st.empty()  # Placeholder para alertas da webcam
+    status_webcam = st.empty() 
+    saida_webcam = st.empty()  
+    texto_webcam = st.empty()  
     botao_iniciar_webcam = st.button("Iniciar Webcam")
     botao_parar_webcam = st.button("Parar Webcam")
-    webcam_processando = False  # Variável de controle
+    webcam_processando = False  
 
     if botao_iniciar_webcam:
         webcam_processando = True
@@ -333,7 +344,7 @@ with tab_webcam:
                     channels="RGB",
                     caption="Webcam em Tempo Real",
                     use_container_width=True,
-                )  # Alteração: Exibir frame da webcam, use_container_width
+                )  
                 texto_webcam.text(mensagem_webcam)
             except StopIteration:
                 status_webcam.text("Webcam finalizada.")
