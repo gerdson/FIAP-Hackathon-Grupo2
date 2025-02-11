@@ -1,8 +1,12 @@
-# FIAP-Hackathon-Grupo2
+# FIAP-Hackathon - Sistema de Detecção de Objetos Cortantes com YOLO e Streamlit
 
-\`\`\`markdown
+## Integrantes do Grupo 2
 
-# Sistema de Detecção de Objetos Cortantes com YOLO e Streamlit
+  * **Wesley Aoyama Silva** - wesleyaoyama@correios.com.br
+  * **Gerdson Cunha Pinheiro** - gerdsoncunha@gmail.com
+  * **Vanderci José Colasso** - vcolasso@correios.com.br
+  * **Rogério Maia de Queiroz Lessa** - rogeriomaia@correios.com.br
+  * **Rafael Valentim Fonseca** - rvalentim@correios.com.br 
 
 Este projeto implementa um sistema de detecção de objetos cortantes (como facas e armas de fogo) utilizando o modelo YOLOv8 e a biblioteca Streamlit para criar uma interface web interativa. O sistema é capaz de processar imagens estáticas, vídeos e fluxos de vídeo em tempo real da webcam, emitindo alertas visuais e por e-mail quando objetos perigosos são detectados.
 
