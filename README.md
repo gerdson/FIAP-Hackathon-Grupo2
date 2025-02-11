@@ -24,16 +24,8 @@ Este projeto implementa um sistema de detecção de objetos cortantes (como faca
 
 Antes de executar o código, você precisará ter instalado os seguintes softwares e bibliotecas:
 
-  * **Python:** Versão 3.7 ou superior ([https://www.python.org/downloads/](https://www.google.com/url?sa=E&source=gmail&q=https://www.python.org/downloads/))
-  * **pip:** Gerenciador de pacotes do Python (geralmente incluído com o Python)
-  * **OpenCV (cv2):** Biblioteca para processamento de imagens ([https://pypi.org/project/opencv-python/](https://www.google.com/url?sa=E&source=gmail&q=https://pypi.org/project/opencv-python/))
-  * **PyTorch:** Framework de aprendizado de máquina ([https://pytorch.org/get-started/locally/](https://www.google.com/url?sa=E&source=gmail&q=https://pytorch.org/get-started/locally/))
-  * **torchvision:** Pacote complementar ao PyTorch para visão computacional ([https://pytorch.org/vision/stable/](https://www.google.com/url?sa=E&source=gmail&q=https://pytorch.org/vision/stable/))
-  * **NumPy:** Biblioteca para computação numérica ([https://numpy.org/install/](https://www.google.com/url?sa=E&source=gmail&q=https://numpy.org/install/))
-  * **Streamlit:** Framework para criar aplicativos web interativos ([https://streamlit.io/](https://www.google.com/url?sa=E&source=gmail&q=https://streamlit.io/))
-  * **Ultralytics (YOLO11):** Biblioteca para utilizar modelos YOLO ([https://github.com/ultralytics/ultralytics](https://www.google.com/url?sa=E&source=gmail&q=https://github.com/ultralytics/ultralytics))
-  * **python-dotenv:** Para carregar variáveis de ambiente de um arquivo `.env` ([https://pypi.org/project/python-dotenv/](https://www.google.com/url?sa=E&source=gmail&q=https://pypi.org/project/python-dotenv/))
-
+  * **Python:** Versão 3.12.8 ou superior ([https://www.python.org/downloads/](https://www.google.com/url?sa=E&source=gmail&q=https://www.python.org/downloads/))
+  
 ## 🛠️ Instalação
 
 Siga os passos abaixo para configurar o ambiente e executar o projeto:
@@ -41,11 +33,9 @@ Siga os passos abaixo para configurar o ambiente e executar o projeto:
 1.  **Clone o repositório:**
 
     ```bash
-    git clone [URL_DO_REPOSITORIO]
-    cd [NOME_DO_REPOSITORIO]
+    git clone https://github.com/gerdson/FIAP-Hackathon-Grupo2
+    cd FIAP-Hackathon-Grupo2
     ```
-
-    *(Substitua `[URL_DO_REPOSITORIO]` pela URL do repositório no GitHub e `[NOME_DO_REPOSITORIO]` pelo nome da pasta que será criada).*
 
 2.  **Crie um ambiente virtual (recomendado):**
 
@@ -76,12 +66,12 @@ Siga os passos abaixo para configurar o ambiente e executar o projeto:
       * Adicione as seguintes variáveis com suas respectivas informações de e-mail:
 
         ```
-        EMAIL_REMETENTE="[endereço de e-mail removido]"
-        EMAIL_DESTINATARIO="[endereço de e-mail removido]"
-        EMAIL_SENHA="sua_senha_de_email"
+        EMAIL_REMETENTE="[endereço de e-mail do remetente]"
+        EMAIL_DESTINATARIO="[endereço de e-mail do destinatário]"
+        EMAIL_SENHA="senha de app do gmail"
         ```
 
-          * **Importante:** Para utilizar o Gmail, pode ser necessário configurar o acesso a "aplicativos menos seguros" na sua conta Google ou gerar uma "Senha de app" se a autenticação de dois fatores estiver ativada. **Tenha cuidado com a segurança das suas credenciais de e-mail.**
+          * **Importante:** Para utilizar a notificação por e-mail (Gmail), é necessário configurar o acesso de autenticação de dois fatores na sua conta Google e gerar uma "Senha de app". **Tenha cuidado com a segurança das suas credenciais de e-mail.**
 
 5.  **Arquivos de Modelo YOLO:**
 
