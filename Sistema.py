@@ -8,7 +8,11 @@ from ultralytics import YOLO
 from typing import Tuple, Any
 import smtplib
 import email.message
+import os
+from dotenv import load_dotenv
 
+# Carrega as variáveis do arquivo .env para o ambiente
+load_dotenv()  
 
 # ====================================================
 # CONFIGURAÇÕES GLOBAIS
@@ -17,9 +21,10 @@ CONFIG_CLASSES = {
     0: {"nome": "cortante", "cooldown": 30, "cor": (0, 0, 255)}
 }
 
-IOU_THRESHOLD = 0.3
-SIMILARIDADE_THRESHOLD = 0.85  # Similaridade mínima entre embeddings
-HISTORICO_EMBEDDINGS = 5  # Número de embeddings armazenados por ID
+CONFIANCA_MINIMA = 0.7
+IOU_THRESHOLD = 0.5
+SIMILARIDADE_THRESHOLD = 0.7  # Similaridade mínima entre embeddings
+HISTORICO_EMBEDDINGS = 20  # Número de embeddings armazenados por ID
 MODELO_CAMINHO = "./modelo/best.pt"
 FONTE_WEBCAM = 0  # 0 para webcam padrão
 
@@ -27,7 +32,10 @@ FONTE_WEBCAM = 0  # 0 para webcam padrão
 MODELO_DETECCAO = YOLO(MODELO_CAMINHO)
 MODELO_EMBEDDING = YOLO(MODELO_CAMINHO)
 
-EMAIL_DESTINATARIO = ''
+# Dados notificacao por email
+EMAIL_REMETENTE = os.environ.get('EMAIL_REMETENTE')
+EMAIL_DESTINATARIO = os.environ.get('EMAIL_DESTINATARIO')
+EMAIL_SENHA = os.environ.get('EMAIL_SENHA')
 
 
 # ====================================================
@@ -94,34 +102,33 @@ def verificar_similaridade(embedding_atual: torch.Tensor, historico: deque) -> b
 
     return max(similaridades) > SIMILARIDADE_THRESHOLD
 
-
-def enviar_notificacao(classe_id: int, objeto_id: int) -> None:
-    """Emite alerta visual no console para objetos detectados"""
-
-    nome_classe = CONFIG_CLASSES[classe_id]["nome"].upper()
-    enviar_email(nome_classe, objeto_id)
-    print(f"\033[91m[ALERTA] {nome_classe} detectado! (ID: {objeto_id})\033[0m")
-    
 def enviar_email(nome_classe: str, objeto_id: int):  
     corpo_email = """
-        f"\033[91m[ALERTA] {nome_classe} detectado! (ID: {objeto_id})\033[0m"
+        <p>f"[ALERTA] {nome_classe} detectado! (ID: {objeto_id})</p>
     """
 
     msg = email.message.Message()
     msg['Subject'] = "Alerta de Objeto Cortante"
-    msg['From'] = 'remetente'
+    msg['From'] = EMAIL_REMETENTE
     msg['To'] = EMAIL_DESTINATARIO
-    password = 'senha' 
+    password = EMAIL_SENHA
     msg.add_header('Content-Type', 'text/html')
     msg.set_payload(corpo_email)
 
     s = smtplib.SMTP('smtp.gmail.com: 587')
     s.starttls()
-    # Login Credentials for sending the mail
+    # Login e Credenciais para enviar o email
     s.login(msg['From'], password)
     s.sendmail(msg['From'], [msg['To']], msg.as_string().encode('utf-8'))
-    print('Email enviado')
+    print('Email enviado!')
 
+
+def enviar_notificacao(classe_id: int, objeto_id: int) -> None:
+    """Emite alerta visual no console para objetos detectados"""
+
+    nome_classe = CONFIG_CLASSES[classe_id]["nome"].upper()
+    #enviar_email(nome_classe, objeto_id)
+    print(f"\033[91m[ALERTA] {nome_classe} detectado! (ID: {objeto_id})\033[0m")
 
 # ====================================================
 # MÓDULO DE PROCESSAMENTO DE IMAGEM
@@ -167,23 +174,22 @@ def processar_video(fonte_video: Any, webcam: bool = False):
 
         tempo_atual = time.time()
         resultados = modelo_detecao.track(frame, persist=True, verbose=False, tracker="bytetrack.yaml")  # Usar ByteTrack e modelo_detecao
-
+        
         mensagem_status = ""
 
-        if (
-            resultados
-            and isinstance(resultados, list)
-            and resultados[0] is not None
-            and hasattr(resultados[0], "boxes")
-        ):  # Verificação adicional antes de acessar .boxes
-            if (
-                resultados[0].boxes is not None and resultados[0].boxes.id is not None
-            ):  # Verificação adicional para boxes e boxes.id
+        if (resultados and isinstance(resultados, list)
+                and resultados[0] is not None
+                and hasattr(resultados[0], "boxes")):
+            if (resultados[0].boxes is not None and resultados[0].boxes.id is not None):
+
+                # Verificação Zero: Confianca
+                #if (resultados[0].boxes.conf < CONFIANCA_MINIMA).all():
+                #    continue
+
                 caixas = resultados[0].boxes.xyxy.cpu().numpy()
                 ids = resultados[0].boxes.id.cpu().numpy().astype(int)
                 classes = resultados[0].boxes.cls.cpu().numpy().astype(int)
 
-                # ... (o resto do seu código de processamento dentro do loop for) ...
                 for caixa, obj_id, classe in zip(caixas, ids, classes):
                     if classe not in CONFIG_CLASSES:
                         continue
@@ -208,18 +214,14 @@ def processar_video(fonte_video: Any, webcam: bool = False):
                     # 3ª Verificação: Similaridade de Embeddings
                     #print("Terceira verificacao...")
                     embedding = extrair_embedding(MODELO_EMBEDDING, frame, caixa)  # Usar MODELO_EMBEDDING para extrair embeddings
-                    similaridade = verificar_similaridade(
-                        embedding, estado["historico_embeddings"][obj_id]
-                    )
+                    similaridade = verificar_similaridade(embedding, estado["historico_embeddings"][obj_id])
 
                     # 4ª Verificação: Decisão Final
                     #print("Quarta verificacao...")
-                    if not sobreposicao and not similaridade:
+                    if not sobreposicao and not similaridade and (resultados[0].boxes.conf >= CONFIANCA_MINIMA).all():
                     #if not sobreposicao:
                         enviar_notificacao(classe, obj_id)
-                        mensagem_status = (
-                            f"{CONFIG_CLASSES[classe]['nome'].upper()} detectado!"
-                        )
+                        mensagem_status = (f"{CONFIG_CLASSES[classe]['nome'].upper()} detectado!")
 
                         # Atualizar estado
                         estado["ids_notificados"][classe][obj_id] = tempo_atual
@@ -247,17 +249,23 @@ def processar_video(fonte_video: Any, webcam: bool = False):
                 if (tempo_atual - t) < CONFIG_CLASSES[classe]["cooldown"]
             ]
 
-        frame_anotado = (
-            resultados[0].plot()
-            if resultados
-            and isinstance(resultados, list)
-            and resultados[0] is not None
-            and hasattr(resultados[0], "plot")
-            and resultados[0].plot() is not None
-            else frame
-        )  # Anotar o frame (se resultados e plot() não forem None)
-        frame_anotado_rgb = cv2.cvtColor(frame_anotado, cv2.COLOR_BGR2RGB)  # Converter para RGB para Streamlit
-        yield frame_anotado_rgb, mensagem_status
+        if (resultados[0].boxes.conf >= CONFIANCA_MINIMA).all():
+            
+            frame_anotado = (
+                resultados[0].plot()
+                if resultados
+                and isinstance(resultados, list)
+                and resultados[0] is not None
+                and hasattr(resultados[0], "plot")
+                and resultados[0].plot() is not None
+                else frame
+            )  # Anotar o frame (se resultados e plot() não forem None)
+            frame_anotado_rgb = cv2.cvtColor(frame_anotado, cv2.COLOR_BGR2RGB)  # Converter para RGB para Streamlit
+            yield frame_anotado_rgb, mensagem_status
+        
+        else:
+             frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+             yield frame, mensagem_status
 
     cap.release()
 
