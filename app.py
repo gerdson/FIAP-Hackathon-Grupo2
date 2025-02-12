@@ -21,9 +21,9 @@ CONFIG_CLASSES = {
     0: {"nome": "cortante", "cooldown": 30, "cor": (0, 0, 255)}
 }
 
-CONFIANCA_MINIMA = 0.7
+CONFIANCA_MINIMA = 0.3
 IOU_THRESHOLD = 0.5
-SIMILARIDADE_THRESHOLD = 0.7  # Similaridade mínima entre embeddings
+SIMILARIDADE_THRESHOLD = 0.5  # Similaridade mínima entre embeddings
 HISTORICO_EMBEDDINGS = 5  # Número de embeddings armazenados por ID
 MODELO_CAMINHO = "./modelo/best.pt"
 FONTE_WEBCAM = 0  # 0 para webcam padrão
@@ -33,7 +33,7 @@ MODELO_DETECCAO = YOLO(MODELO_CAMINHO)
 MODELO_EMBEDDING = YOLO(MODELO_CAMINHO)
 
 # Dados notificacao por email
-ENVIAR_EMAIL = False
+ENVIAR_EMAIL = True
 EMAIL_REMETENTE = os.environ.get('EMAIL_REMETENTE')
 EMAIL_DESTINATARIO = os.environ.get('EMAIL_DESTINATARIO')
 EMAIL_SENHA = os.environ.get('EMAIL_SENHA')

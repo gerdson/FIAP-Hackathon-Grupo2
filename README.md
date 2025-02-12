@@ -8,7 +8,7 @@
   * **Rogério Maia de Queiroz Lessa** - rogeriomaia@correios.com.br
   * **Rafael Valentim Fonseca** - rvalentim@correios.com.br 
 
-Este projeto implementa um sistema de detecção de objetos cortantes (como facas e armas de fogo) utilizando o modelo YOLOv8 e a biblioteca Streamlit para criar uma interface web interativa. O sistema é capaz de processar imagens estáticas, vídeos e fluxos de vídeo em tempo real da webcam, emitindo alertas visuais e por e-mail quando objetos perigosos são detectados.
+Este projeto implementa um sistema de detecção de objetos cortantes (facas, tesouras, etc) utilizando o modelo YOLO11 e a biblioteca Streamlit para criar uma interface web interativa. O sistema é capaz de processar imagens estáticas, vídeos e fluxos de vídeo em tempo real da webcam, emitindo alertas no console e por e-mail quando objetos perigosos são detectados.
 
 ## 🚀 Funcionalidades
 
