@@ -2,7 +2,7 @@
 
 Este relatório detalha os resultados do treinamento de um modelo YOLO para detecção de objetos da classe "cortante". Os resultados são apresentados através de métricas, curvas de performance, matrizes de confusão, análise de bounding boxes e inspeção visual das predições. Todos os arquivos mencionados abaixo (exceto este `resultados.md`) devem ser salvos dentro da pasta chamada `resultados`.
 
-### Métricas de Treinamento e Validação (`resultados/results.csv` e `resultados/results_metrics.png`)
+### Métricas de Treinamento e Validação (`resultados/results.csv` e `resultados/results.png`)
 
 O arquivo `resultados/results.csv` e o gráfico `resultados/results_metrics.png` mostram a evolução das métricas durante as 100 épocas de treinamento. As principais métricas a serem analisadas são:
 
@@ -10,7 +10,7 @@ O arquivo `resultados/results.csv` e o gráfico `resultados/results_metrics.png`
     *   **Análise:** Observando o gráfico `resultados/results_metrics.png`, as losses de treinamento (box\_loss, cls\_loss e dfl\_loss) diminuem significativamente nas primeiras épocas e continuam a decair suavemente até o final do treinamento, indicando um bom aprendizado do modelo nos dados de treinamento.
 
     ```markdown
-    ![Gráfico de Métricas de Treinamento](resultados/results_metrics.png)
+    ![Gráfico de Métricas de Treinamento](resultados/results.png)
     ```
 
 *   **Losses de Validação (val/box\_loss, val/cls\_loss, val/dfl\_loss):**  Representam o erro do modelo nos dados de validação, que não foram usados no treinamento. Essas losses também devem diminuir e idealmente se estabilizar, indicando que o modelo está generalizando bem para dados novos.
