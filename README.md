@@ -72,9 +72,10 @@ Siga os passos abaixo para configurar o ambiente e executar o projeto:
         ([MyAcconut Google](https://myaccount.google.com))
         ([Gerenciar Senhas de app Google](https://myaccount.google.com/apppasswords))
 
-5.  **Arquivos de Modelo YOLO:**
+5.  **Arquivos de Modelo YOLO e Treinamento:**
 
       * Certifique-se de ter o arquivo de modelo YOLO11 treinado (`best.pt`) e coloque-o na pasta `modelo` dentro do diretório do projeto. Se a pasta `modelo` não existir, crie-a.
+      * Foi feito um treinamento do modelo YOLO11 detalhado no arquivo `treino.ipynb` dentro do diretório do projeto. Os resultados estão no arquivo `resultados.md`.
       
 ## 🚀 Execução
 
