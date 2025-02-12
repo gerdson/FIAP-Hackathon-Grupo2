@@ -1,4 +1,4 @@
-# FIAP-Hackathon - Sistema de Detecção de Objetos Cortantes com YOLO e Streamlit
+# FIAP-Hackathon - Sistema de Detecção de Objetos Cortantes com YOLO11 e Streamlit
 
 ## Integrantes do Grupo 2
 
@@ -24,7 +24,7 @@ Este projeto implementa um sistema de detecção de objetos cortantes (como faca
 
 Antes de executar o código, você precisará ter instalado os seguintes softwares e bibliotecas:
 
-  * **Python:** Versão 3.12.8 ou superior ([https://www.python.org/downloads/](https://www.google.com/url?sa=E&source=gmail&q=https://www.python.org/downloads/))
+  * **Python:** Versão 3.12.8 ou superior ([https://www.python.org/downloads/](https://www.python.org/downloads/))
   
 ## 🛠️ Instalação
 
@@ -37,22 +37,17 @@ Siga os passos abaixo para configurar o ambiente e executar o projeto:
     cd FIAP-Hackathon-Grupo2
     ```
 
-2.  **Crie um ambiente virtual (recomendado):**
+2.  **Crie um ambiente virtual no conda (recomendado):**
 
     ```bash
-    python -m venv venv
+    conda create -n nome_ambiente python=3.12.8
     ```
 
-      * Para ativar o ambiente virtual:\*
-          * **No Linux/macOS:**
+      * Para ativar o ambiente virtual:
             ```bash
-            source venv/bin/activate
+            conda activate nome_ambiente
             ```
-          * **No Windows:**
-            ```bash
-            venv\Scripts\activate
-            ```
-
+          
 3.  **Instale as dependências Python:**
 
     ```bash
@@ -71,13 +66,16 @@ Siga os passos abaixo para configurar o ambiente e executar o projeto:
         EMAIL_SENHA="senha de app do gmail"
         ```
 
-          * **Importante:** Para utilizar a notificação por e-mail (Gmail), é necessário configurar o acesso de autenticação de dois fatores na sua conta Google e gerar uma "Senha de app". **Tenha cuidado com a segurança das suas credenciais de e-mail.**
+          * **Importante:** Para utilizar a notificação por e-mail (Gmail), é necessário configurar o acesso de autenticação de dois fatores no e-mail do remetente na sua respectiva conta Google e gerar uma "Senha de app". **Tenha cuidado com a segurança das suas credenciais de e-mail.**
+      
+      * Links: 
+        ([MyAcconut Google](https://myaccount.google.com))
+        ([Gerenciar Senhas de app Google](https://myaccount.google.com/apppasswords))
 
 5.  **Arquivos de Modelo YOLO:**
 
-      * Certifique-se de ter o arquivo de modelo YOLO treinado (`best.pt`) e coloque-o na pasta `modelo` dentro do diretório do projeto. Se a pasta `modelo` não existir, crie-a.
-      * Caso não possua um modelo treinado, você precisará treinar um modelo YOLO11 para detecção de objetos cortantes ou utilizar um modelo pré-treinado adequado.
-
+      * Certifique-se de ter o arquivo de modelo YOLO11 treinado (`best.pt`) e coloque-o na pasta `modelo` dentro do diretório do projeto. Se a pasta `modelo` não existir, crie-a.
+      
 ## 🚀 Execução
 
 Para executar o sistema, siga as instruções abaixo:
@@ -153,7 +151,7 @@ nome-do-projeto/
 ## 📝 Observações
 
   * **Desempenho:** O desempenho do sistema pode variar dependendo do hardware, da complexidade do modelo YOLO e da resolução do vídeo/imagem.
-  * **Precisão:** A precisão da detecção depende da qualidade do modelo YOLO treinado e dos dados de treinamento utilizados.
+  * **Precisão:** A precisão da detecção depende da qualidade do modelo YOLO11 treinado e dos dados de treinamento utilizados.
   * **Segurança:** Tenha cuidado ao configurar as credenciais de e-mail e ao habilitar recursos de segurança menos rigorosos na sua conta de e-mail.
 
 ## 🤝 Contribuições
@@ -163,6 +161,3 @@ Contribuições são bem-vindas\! Sinta-se à vontade para abrir issues e pull r
 -----
 
 **Este README.md fornece instruções detalhadas para executar o código do sistema de detecção de objetos cortantes. Certifique-se de seguir todos os passos de instalação e configuração para garantir o funcionamento correto do sistema.**
-
-```
-```

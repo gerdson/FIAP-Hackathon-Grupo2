@@ -65,7 +65,7 @@ def calcular_iou(caixa1: np.ndarray, caixa2: np.ndarray) -> float:
 
     
 def extrair_embedding(modelo_embedding: YOLO, frame: np.ndarray, caixa: np.ndarray) -> torch.Tensor: # Usar modelo_embedding como argumento
-    """Extrai vetor de características da região do objeto detectado"""
+    """Extrai vetor de embeddings da região do objeto detectado"""
     x1, y1, x2, y2 = map(int, caixa)
     roi = frame[y1:y2, x1:x2]
 
