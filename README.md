@@ -44,9 +44,9 @@ Siga os passos abaixo para configurar o ambiente e executar o projeto:
     ```
 
       * Para ativar o ambiente virtual:
-            ```bash
-            conda activate nome_ambiente
-            ```
+        ```bash
+        conda activate nome_ambiente
+        ```
           
 3.  **Instale as dependências Python:**
 
