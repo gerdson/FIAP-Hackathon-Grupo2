@@ -12,7 +12,7 @@ import os
 from dotenv import load_dotenv
 
 # Carrega as variáveis do arquivo .env para o ambiente
-load_dotenv()  
+load_dotenv()
 
 # ====================================================
 # CONFIGURAÇÕES GLOBAIS
@@ -22,15 +22,19 @@ CONFIG_CLASSES = {
 }
 
 CONFIANCA_MINIMA = 0.3
-IOU_THRESHOLD = 0.5
-SIMILARIDADE_THRESHOLD = 0.5  # Similaridade mínima entre embeddings
-HISTORICO_EMBEDDINGS = 5  # Número de embeddings armazenados por ID
+SIMILARIDADE_THRESHOLD = 0.95  # Similaridade mínima entre embeddings
+HISTORICO_EMBEDDINGS = 10  # Número de embeddings armazenados por ID
 MODELO_CAMINHO = "./modelo/best.pt"
 FONTE_WEBCAM = 0  # 0 para webcam padrão
 
 # Carregar modelos separados para detecção/rastreamento e embeddings
 MODELO_DETECCAO = YOLO(MODELO_CAMINHO)
 MODELO_EMBEDDING = YOLO(MODELO_CAMINHO)
+
+#imprime camadas do modelo
+#for nome, modulo in MODELO_EMBEDDING.model.named_modules():
+#    print(f"Camada: {nome}, Tipo: {type(modulo)}")
+
 
 # Dados notificacao por email
 ENVIAR_EMAIL = False
@@ -47,23 +51,6 @@ def inicializar_modelo() -> YOLO:
     return MODELO_DETECCAO  # Retorna o modelo de detecção pré-carregado
 
 
-def calcular_iou(caixa1: np.ndarray, caixa2: np.ndarray) -> float:
-    """Calcula a intersecção sobre união entre duas caixas delimitadoras"""
-    x1_1, y1_1, x2_1, y2_1 = caixa1
-    x1_2, y1_2, x2_2, y2_2 = caixa2
-
-    # Calcula área de interseção
-    xi1 = max(x1_1, x1_2)
-    yi1 = max(y1_1, y1_2)
-    xi2 = min(x2_1, x2_2)
-    yi2 = min(y2_2, y2_2)
-
-    intersecao = max(0, xi2 - xi1) * max(0, yi2 - yi1)
-    area_total = (x2_1 - x1_1) * (y2_1 - y1_1) + (x2_2 - x1_2) * (y2_2 - y1_2) - intersecao
-
-    return intersecao / area_total if area_total != 0 else 0
-
-    
 def extrair_embedding(modelo_embedding: YOLO, frame: np.ndarray, caixa: np.ndarray) -> torch.Tensor: # Usar modelo_embedding como argumento
     """Extrai vetor de embeddings da região do objeto detectado"""
     x1, y1, x2, y2 = map(int, caixa)
@@ -73,23 +60,18 @@ def extrair_embedding(modelo_embedding: YOLO, frame: np.ndarray, caixa: np.ndarr
     if roi.size == 0:
         return torch.zeros(512)
 
-    # Extrai embeddings usando MODELO_EMBEDDING e embed=[10] (ou outro índice de camada válido)
-    resultados = MODELO_EMBEDDING.predict(roi, verbose=False, augment=False, embed=[10]) # Usar MODELO_EMBEDDING aqui
-
+    # Extrai embeddings usando índice de camada anterior da saida)
+    resultados = MODELO_EMBEDDING.predict(roi, verbose=False, augment=False, embed=[9, 10, 19, 22]) # Usar MODELO_EMBEDDING aqui
+    
     if isinstance(resultados[0], torch.Tensor): # Verificar se resultados[0] é um Tensor
         embedding = resultados[0] # Usar resultados[0] diretamente como embedding
-        #print(f"Embeddings extraídos com sucesso da camada [10]:") # Mensagem de sucesso (opcional)
-        #print(f"Shape do embedding: {embedding.shape}") # Imprimir shape do embedding (opcional)
         return embedding.flatten()
     else:
-        #print(f"Falha ao extrair embeddings com camada [10] ou resultados não são Tensor.") # Mensagem de falha (opcional)
         return torch.zeros(512) # Retornar zeros como fallback
 
 
 def verificar_similaridade(embedding_atual: torch.Tensor, historico: deque) -> bool:
     """Compara embedding atual com histórico usando similaridade de cosseno"""
-
-    #print("Inicio verificar_similaridade")
 
     if not historico:
         return False
@@ -99,14 +81,18 @@ def verificar_similaridade(embedding_atual: torch.Tensor, historico: deque) -> b
         for emb in historico
     ]
 
-    #print("Fim verificar_similaridade")
+    soma = sum(similaridades) # Soma todos os elementos da lista
+    quantidade = len(similaridades) # Obtém o número de elementos na lista
+    media = soma / quantidade # Calcula a média
 
-    return max(similaridades) > SIMILARIDADE_THRESHOLD
+    print(f"media das similaridades: {media}")
+    #print(f"similaridade: {max(similaridades)}")
 
-def enviar_email(nome_classe: str, objeto_id: int):  
-    corpo_email = """
-        <p>f"[ALERTA] {nome_classe} detectado! (ID: {objeto_id})</p>
-    """
+    #return max(similaridades) > SIMILARIDADE_THRESHOLD
+    return media > SIMILARIDADE_THRESHOLD
+
+def enviar_email(nome_classe: str):
+    corpo_email = f"[ALERTA] {nome_classe} detectado!"
 
     msg = email.message.Message()
     msg['Subject'] = "Alerta de Objeto Cortante"
@@ -124,15 +110,15 @@ def enviar_email(nome_classe: str, objeto_id: int):
     print('Email enviado!')
 
 
-def enviar_notificacao(classe_id: int, objeto_id: int) -> None:
+def enviar_notificacao(classe_id: int) -> None:
     """Emite alerta visual no console para objetos detectados"""
 
     nome_classe = CONFIG_CLASSES[classe_id]["nome"].upper()
-    
+
     if(ENVIAR_EMAIL):
-        enviar_email(nome_classe, objeto_id)
-    
-    print(f"\033[91m[ALERTA] {nome_classe} detectado! (ID: {objeto_id})\033[0m")
+        enviar_email(nome_classe)
+
+    print(f"\033[91m[ALERTA] {nome_classe} detectado!\033[0m")
 
 # ====================================================
 # MÓDULO DE PROCESSAMENTO DE IMAGEM
@@ -159,78 +145,56 @@ def processar_imagem(caminho_imagem: str) -> Tuple[np.ndarray, str]:
 # ====================================================
 def processar_video(fonte_video: Any, webcam: bool = False):
     """Processa fluxo de vídeo com 4 camadas de verificação"""
-    modelo_detecao = inicializar_modelo()  # Usar modelo_detecao para detecção/rastreamento
+    modelo_detecao = inicializar_modelo()  # Usar modelo_detecao para detecção
 
-    # Estado global para rastreamento
+    # Estado global para detecção
     estado = {
-        "ids_notificados": defaultdict(dict),  # {classe: {id: último_tempo}}
+        "ultima_notificacao": defaultdict(float),  # {classe: último_tempo}
         "deteccoes_recentes": defaultdict(list),  # {classe: [(caixa, tempo)]}
-        "historico_embeddings": defaultdict(lambda: deque(maxlen=HISTORICO_EMBEDDINGS)),
+        "historico_embeddings": defaultdict(lambda: deque(maxlen=HISTORICO_EMBEDDINGS)), # {classe: deque[embeddings]}
     }
 
     cap = cv2.VideoCapture(FONTE_WEBCAM if webcam else fonte_video)
-    print("Ligou webcam...")
-
+    
     while cap.isOpened():
         sucesso, frame = cap.read()
         if not sucesso:
             break
 
         tempo_atual = time.time()
-        resultados = modelo_detecao.track(frame, persist=True, verbose=False, tracker="bytetrack.yaml")  # Usar ByteTrack e modelo_detecao
-        
+        resultados = modelo_detecao.predict(frame, verbose=False) # Usar modelo_detecao para detecção
         mensagem_status = ""
 
         if (resultados and isinstance(resultados, list)
                 and resultados[0] is not None
                 and hasattr(resultados[0], "boxes")):
-            if (resultados[0].boxes is not None and resultados[0].boxes.id is not None):
-
-                # Verificação Zero: Confianca
-                #if (resultados[0].boxes.conf < CONFIANCA_MINIMA).all():
-                #    continue
+            if (resultados[0].boxes is not None):
 
                 caixas = resultados[0].boxes.xyxy.cpu().numpy()
-                ids = resultados[0].boxes.id.cpu().numpy().astype(int)
                 classes = resultados[0].boxes.cls.cpu().numpy().astype(int)
 
-                for caixa, obj_id, classe in zip(caixas, ids, classes):
+                for caixa, classe in zip(caixas, classes):
                     if classe not in CONFIG_CLASSES:
                         continue
 
-                    # 1ª Verificação: Cooldown por ID
-                    #print("Primeira verificacao...")
-                    ultima_notificacao = estado["ids_notificados"][classe].get(obj_id, 0)
-                    if ((tempo_atual - ultima_notificacao) < CONFIG_CLASSES[classe]["cooldown"]):
-                        continue
+                    # Verificação: Cooldown por Classe, Similaridade de Embeddings e Confianca
+                    ultima_notificacao = estado["ultima_notificacao"][classe]
+                    condicao_cooldown = ((tempo_atual - ultima_notificacao) < CONFIG_CLASSES[classe]["cooldown"])
 
-                    # 2ª Verificação: Sobreposição Espacial
-                    #print("Segunda verificacao...")
-                    sobreposicao = any(
-                        calcular_iou(caixa, caixa_antiga) > IOU_THRESHOLD
-                        and (tempo_atual - tempo_antigo)
-                        < CONFIG_CLASSES[classe]["cooldown"]
-                        for caixa_antiga, tempo_antigo in estado["deteccoes_recentes"][
-                            classe
-                        ]
-                    )
-
-                    # 3ª Verificação: Similaridade de Embeddings
-                    #print("Terceira verificacao...")
+                    #print(f"caixa: {caixa}") 
                     embedding = extrair_embedding(MODELO_EMBEDDING, frame, caixa)  # Usar MODELO_EMBEDDING para extrair embeddings
-                    similaridade = verificar_similaridade(embedding, estado["historico_embeddings"][obj_id])
+                    similaridade = verificar_similaridade(embedding, estado["historico_embeddings"][classe])
 
-                    # 4ª Verificação: Decisão Final
-                    #print("Quarta verificacao...")
-                    if not sobreposicao and not similaridade and (resultados[0].boxes.conf >= CONFIANCA_MINIMA).all():
-                    #if not sobreposicao:
-                        enviar_notificacao(classe, obj_id)
+                    if (not similaridade and (resultados[0].boxes.conf >= CONFIANCA_MINIMA).all()) or (not condicao_cooldown):
+                        enviar_notificacao(classe)
                         mensagem_status = (f"{CONFIG_CLASSES[classe]['nome'].upper()} detectado!")
 
                         # Atualizar estado
-                        estado["ids_notificados"][classe][obj_id] = tempo_atual
+                        estado["ultima_notificacao"][classe] = tempo_atual
                         estado["deteccoes_recentes"][classe].append((caixa, tempo_atual))
-                        #estado["historico_embeddings"][obj_id].append(embedding)
+                        estado["historico_embeddings"][classe].append(embedding)
+                        if len(estado["historico_embeddings"][classe]) > HISTORICO_EMBEDDINGS:
+                            estado["historico_embeddings"][classe].popleft() # Mantem o tamanho máximo do histórico
             else:
                 mensagem_status = "Nenhum objeto perigoso detectado."
 
@@ -239,13 +203,6 @@ def processar_video(fonte_video: Any, webcam: bool = False):
 
         # Manutenção do estado
         for classe in CONFIG_CLASSES:
-            # Limpar IDs inativos
-            estado["ids_notificados"][classe] = {
-                id: tempo
-                for id, tempo in estado["ids_notificados"][classe].items()
-                if (tempo_atual - tempo) < CONFIG_CLASSES[classe]["cooldown"]
-            }
-
             # Limpar detecções antigas
             estado["deteccoes_recentes"][classe] = [
                 (c, t)
@@ -254,7 +211,7 @@ def processar_video(fonte_video: Any, webcam: bool = False):
             ]
 
         if (resultados[0].boxes.conf >= CONFIANCA_MINIMA).all():
-            
+
             frame_anotado = (
                 resultados[0].plot()
                 if resultados
@@ -266,7 +223,7 @@ def processar_video(fonte_video: Any, webcam: bool = False):
             )  # Anotar o frame (se resultados e plot() não forem None)
             frame_anotado_rgb = cv2.cvtColor(frame_anotado, cv2.COLOR_BGR2RGB)  # Converter para RGB para Streamlit
             yield frame_anotado_rgb, mensagem_status
-        
+
         else:
              frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
              yield frame, mensagem_status
@@ -278,7 +235,7 @@ def processar_video(fonte_video: Any, webcam: bool = False):
 # INTERFACE GRÁFICA (STREAMLIT)
 # ====================================================
 st.set_page_config(page_title="Sistema de Segurança Avançado")
-st.markdown("# 🔪🔫 Sistema de Detecção de Objetos Cortantes") 
+st.markdown("# 🔪🔫 Sistema de Detecção de Objetos Cortantes")
 
 tab_imagem, tab_video, tab_webcam = st.tabs(
     ["📷 Imagem", "🎥 Vídeo", "🌐 Webcam (Tempo Real)"]
@@ -288,10 +245,10 @@ tab_imagem, tab_video, tab_webcam = st.tabs(
 with tab_imagem:
     entrada_imagem = st.file_uploader(
         "Carregar Imagem", type=["png", "jpg", "jpeg"]
-    )  
-    botao_imagem = st.button("Analisar Imagem") 
-    saida_imagem = st.empty()  
-    texto_imagem = st.empty()  
+    )
+    botao_imagem = st.button("Analisar Imagem")
+    saida_imagem = st.empty()
+    texto_imagem = st.empty()
 
     if botao_imagem:
         if entrada_imagem is not None:
@@ -312,7 +269,7 @@ with tab_imagem:
 with tab_video:
     entrada_video = st.file_uploader(
         "Carregar Vídeo", type=["mp4", "avi", "mov"]
-    )  
+    )
     botao_video = st.button("Iniciar Análise de Vídeo")
     saida_video = st.empty()
     texto_video = st.empty()
@@ -330,19 +287,19 @@ with tab_video:
                     channels="RGB",
                     caption="Visualização em Tempo Real",
                     use_container_width=True,
-                )  
+                )
                 texto_video.text(mensagem_status)
         else:
             texto_video.text("Por favor, carregue um vídeo.")
 
 # Aba da Webcam (Tempo Real)
 with tab_webcam:
-    status_webcam = st.empty() 
-    saida_webcam = st.empty()  
-    texto_webcam = st.empty()  
+    status_webcam = st.empty()
+    saida_webcam = st.empty()
+    texto_webcam = st.empty()
     botao_iniciar_webcam = st.button("Iniciar Webcam")
     botao_parar_webcam = st.button("Parar Webcam")
-    webcam_processando = False  
+    webcam_processando = False
 
     if botao_iniciar_webcam:
         webcam_processando = True
@@ -356,7 +313,7 @@ with tab_webcam:
                     channels="RGB",
                     caption="Webcam em Tempo Real",
                     use_container_width=True,
-                )  
+                )
                 texto_webcam.text(mensagem_webcam)
             except StopIteration:
                 status_webcam.text("Webcam finalizada.")
