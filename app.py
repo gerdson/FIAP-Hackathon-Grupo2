@@ -11,6 +11,11 @@ import email.message
 import os
 from dotenv import load_dotenv
 
+import mediapipe as mp
+from mediapipe.tasks import python
+from mediapipe.tasks.python import vision
+
+
 # Carrega as variáveis do arquivo .env para o ambiente
 load_dotenv()
 
@@ -21,19 +26,20 @@ CONFIG_CLASSES = {
     0: {"nome": "cortante", "cooldown": 30, "cor": (0, 0, 255)}
 }
 
-CONFIANCA_MINIMA = 0.3
-SIMILARIDADE_THRESHOLD = 0.95  # Similaridade mínima entre embeddings
-HISTORICO_EMBEDDINGS = 10  # Número de embeddings armazenados por ID
+CONFIANCA_MINIMA = 0.6
+SIMILARIDADE_THRESHOLD = 0.5  # Similaridade mínima entre embeddings
+HISTORICO_EMBEDDINGS = 5  # Historico de embeddings
 MODELO_CAMINHO = "./modelo/best.pt"
 FONTE_WEBCAM = 0  # 0 para webcam padrão
 
-# Carregar modelos separados para detecção/rastreamento e embeddings
+# Carregar modelos separados para detecção
 MODELO_DETECCAO = YOLO(MODELO_CAMINHO)
-MODELO_EMBEDDING = YOLO(MODELO_CAMINHO)
 
-#imprime camadas do modelo
-#for nome, modulo in MODELO_EMBEDDING.model.named_modules():
-#    print(f"Camada: {nome}, Tipo: {type(modulo)}")
+# Configuração do MediaPipe Image Embedder
+MEDIA_PIPE_MODEL_PATH = './modelo/mobilenet_v3_large.tflite'
+base_options = python.BaseOptions(model_asset_path=MEDIA_PIPE_MODEL_PATH)
+options = vision.ImageEmbedderOptions(base_options=base_options, l2_normalize=True)
+MODELO_EMBEDDING_MEDIAPIPE = vision.ImageEmbedder.create_from_options(options)
 
 
 # Dados notificacao por email
@@ -51,46 +57,51 @@ def inicializar_modelo() -> YOLO:
     return MODELO_DETECCAO  # Retorna o modelo de detecção pré-carregado
 
 
-def extrair_embedding(modelo_embedding: YOLO, frame: np.ndarray, caixa: np.ndarray) -> torch.Tensor: # Usar modelo_embedding como argumento
-    """Extrai vetor de embeddings da região do objeto detectado"""
+def extrair_embedding(modelo_embedding: vision.ImageEmbedder, frame: np.ndarray, caixa: np.ndarray) -> Any:
+    """Extrai vetor de embeddings da região do objeto detectado usando MediaPipe"""
     x1, y1, x2, y2 = map(int, caixa)
     roi = frame[y1:y2, x1:x2]
 
+    # Converter ROI de BGR (OpenCV padrão) para RGB (MediaPipe padrão ou esperado)
+    roi_rgb = cv2.cvtColor(roi, cv2.COLOR_BGR2RGB)
+
+    # Verificação do tipo de dados (debug)
+    #print(f"Tipo de dados do ROI antes do MediaPipe: {roi_rgb.dtype}")
+
+    roi_mp_image = mp.Image(image_format=mp.ImageFormat.SRGB, data=roi_rgb) # Usar ROI convertido para RGB
+
     # Fallback para ROIs inválidas
     if roi.size == 0:
-        return torch.zeros(512)
+        # Retorna um embedding vazio ou lida com este caso conforme necessário
+        return None  # Ou retornar um embedding padrão preenchido com zeros se preferir
 
-    # Extrai embeddings usando índice de camada anterior da saida)
-    resultados = MODELO_EMBEDDING.predict(roi, verbose=False, augment=False, embed=[9, 10, 19, 22]) # Usar MODELO_EMBEDDING aqui
-    
-    if isinstance(resultados[0], torch.Tensor): # Verificar se resultados[0] é um Tensor
-        embedding = resultados[0] # Usar resultados[0] diretamente como embedding
-        return embedding.flatten()
+    embedding_result = modelo_embedding.embed(roi_mp_image)
+
+    if embedding_result and embedding_result.embeddings:
+        #print(f"Tipo do embedding retornado: {type(embedding_result.embeddings[0])}") # Para debug
+        return embedding_result.embeddings[0] # Retorna o primeiro embedding
     else:
-        return torch.zeros(512) # Retornar zeros como fallback
+        return None # Ou retornar um embedding padrão preenchido com zeros se preferir
 
 
-def verificar_similaridade(embedding_atual: torch.Tensor, historico: deque) -> bool:
-    """Compara embedding atual com histórico usando similaridade de cosseno"""
+def verificar_similaridade(embedding_atual: Any, historico: deque) -> bool: # type hint changed to Any
+    """Compara embedding atual com histórico usando similaridade de cosseno do MediaPipe"""
 
-    if not historico:
+    if not historico or embedding_atual is None: # Verifica se embedding_atual não é None
         return False
 
-    similaridades = [
-        torch.nn.functional.cosine_similarity(embedding_atual, emb, dim=0).item()
-        for emb in historico
-    ]
+    similaridades = []
+    for emb in historico:
+        if emb is not None: # Verifica se o embedding no histórico não é None
+            similaridade = vision.ImageEmbedder.cosine_similarity(embedding_atual, emb)
+            similaridades.append(similaridade)
 
-    soma = sum(similaridades) # Soma todos os elementos da lista
-    quantidade = len(similaridades) # Obtém o número de elementos na lista
-    media = soma / quantidade # Calcula a média
+    if not similaridades: # Se não houver similaridades válidas para comparar
+        return False
 
-    print(f"media das similaridades: {media}")
-    #print(f"similaridade: {max(similaridades)}")
-
-    #return max(similaridades) > SIMILARIDADE_THRESHOLD
-    return media > SIMILARIDADE_THRESHOLD
-
+    #print(f"similaridade max (MediaPipe): {max(similaridades)} - {max(similaridades) > SIMILARIDADE_THRESHOLD}")
+    return max(similaridades) > SIMILARIDADE_THRESHOLD
+    
 def enviar_email(nome_classe: str):
     corpo_email = f"[ALERTA] {nome_classe} detectado!"
 
@@ -145,7 +156,7 @@ def processar_imagem(caminho_imagem: str) -> Tuple[np.ndarray, str]:
 # ====================================================
 def processar_video(fonte_video: Any, webcam: bool = False):
     """Processa fluxo de vídeo com 4 camadas de verificação"""
-    modelo_detecao = inicializar_modelo()  # Usar modelo_detecao para detecção
+    modelo_detecao = inicializar_modelo()  # Usar modelo de detecção
 
     # Estado global para detecção
     estado = {
@@ -155,7 +166,7 @@ def processar_video(fonte_video: Any, webcam: bool = False):
     }
 
     cap = cv2.VideoCapture(FONTE_WEBCAM if webcam else fonte_video)
-    
+
     while cap.isOpened():
         sucesso, frame = cap.read()
         if not sucesso:
@@ -181,20 +192,26 @@ def processar_video(fonte_video: Any, webcam: bool = False):
                     ultima_notificacao = estado["ultima_notificacao"][classe]
                     condicao_cooldown = ((tempo_atual - ultima_notificacao) < CONFIG_CLASSES[classe]["cooldown"])
 
-                    #print(f"caixa: {caixa}") 
-                    embedding = extrair_embedding(MODELO_EMBEDDING, frame, caixa)  # Usar MODELO_EMBEDDING para extrair embeddings
-                    similaridade = verificar_similaridade(embedding, estado["historico_embeddings"][classe])
+                    embedding_mp = extrair_embedding(MODELO_EMBEDDING_MEDIAPIPE, frame, caixa)  # Usar MODELO_EMBEDDING_MEDIAPIPE para extrair embeddings
+                    similaridade = verificar_similaridade(embedding_mp, estado["historico_embeddings"][classe])
 
-                    if (not similaridade and (resultados[0].boxes.conf >= CONFIANCA_MINIMA).all()) or (not condicao_cooldown):
+                    #print(f"confianca: {(resultados[0].boxes.conf >= CONFIANCA_MINIMA).all()}")
+                    #print(f"confianca maxima: {torch.max(resultados[0].boxes.conf)}")
+                    if (not similaridade and (torch.max(resultados[0].boxes.conf) >= CONFIANCA_MINIMA)) or (not condicao_cooldown):
                         enviar_notificacao(classe)
                         mensagem_status = (f"{CONFIG_CLASSES[classe]['nome'].upper()} detectado!")
 
                         # Atualizar estado
                         estado["ultima_notificacao"][classe] = tempo_atual
                         estado["deteccoes_recentes"][classe].append((caixa, tempo_atual))
-                        estado["historico_embeddings"][classe].append(embedding)
-                        if len(estado["historico_embeddings"][classe]) > HISTORICO_EMBEDDINGS:
-                            estado["historico_embeddings"][classe].popleft() # Mantem o tamanho máximo do histórico
+                        if embedding_mp is not None: # Adiciona embedding apenas se não for None
+                            estado["historico_embeddings"][classe].append(embedding_mp)
+                            if len(estado["historico_embeddings"][classe]) > HISTORICO_EMBEDDINGS:
+                                estado["historico_embeddings"][classe].popleft() # Mantem o tamanho máximo do histórico
+                    elif similaridade:
+                         mensagem_status = (f"Objeto similar a {CONFIG_CLASSES[classe]['nome'].upper()} detectado.")
+                    else:
+                         mensagem_status = "Nenhum objeto perigoso detectado."
             else:
                 mensagem_status = "Nenhum objeto perigoso detectado."
 
@@ -210,9 +227,7 @@ def processar_video(fonte_video: Any, webcam: bool = False):
                 if (tempo_atual - t) < CONFIG_CLASSES[classe]["cooldown"]
             ]
 
-        if (resultados[0].boxes.conf >= CONFIANCA_MINIMA).all():
-
-            frame_anotado = (
+        frame_anotado = (
                 resultados[0].plot()
                 if resultados
                 and isinstance(resultados, list)
@@ -221,12 +236,26 @@ def processar_video(fonte_video: Any, webcam: bool = False):
                 and resultados[0].plot() is not None
                 else frame
             )  # Anotar o frame (se resultados e plot() não forem None)
-            frame_anotado_rgb = cv2.cvtColor(frame_anotado, cv2.COLOR_BGR2RGB)  # Converter para RGB para Streamlit
-            yield frame_anotado_rgb, mensagem_status
+        frame_anotado_rgb = cv2.cvtColor(frame_anotado, cv2.COLOR_BGR2RGB)  # Converter para RGB para Streamlit
+        yield frame_anotado_rgb, mensagem_status
+        
+        #if (resultados[0].boxes.conf >= CONFIANCA_MINIMA).all():
 
-        else:
-             frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-             yield frame, mensagem_status
+            #frame_anotado = (
+            #    resultados[0].plot()
+            #    if resultados
+            #    and isinstance(resultados, list)
+            #    and resultados[0] is not None
+            #    and hasattr(resultados[0], "plot")
+            #    and resultados[0].plot() is not None
+            #    else frame
+            #)  # Anotar o frame (se resultados e plot() não forem None)
+            #frame_anotado_rgb = cv2.cvtColor(frame_anotado, cv2.COLOR_BGR2RGB)  # Converter para RGB para Streamlit
+            #yield frame_anotado_rgb, mensagem_status
+
+        #else:
+        #     frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+        #     yield frame, mensagem_status
 
     cap.release()
 
