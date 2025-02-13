@@ -13,11 +13,10 @@ Este projeto implementa um sistema de detecção de objetos cortantes (facas, te
 ## 🚀 Funcionalidades
 
   * **Detecção de Objetos Cortantes:** Identifica objetos pré-definidos como "cortantes" em imagens e vídeos.
-  * **Rastreamento de Objetos:** Utiliza o ByteTrack para rastrear objetos em vídeos, melhorando a precisão da detecção ao longo do tempo.
   * **Interface Web Interativa:**  Desenvolvido com Streamlit, oferece uma interface simples e intuitiva para carregar imagens, vídeos e iniciar a detecção via webcam.
   * **Alertas Visuais:**  Destaca visualmente os objetos detectados na interface e emite alertas no console.
   * **Notificações por E-mail:**  Envia e-mails de alerta quando um objeto perigoso é detectado (configurável).
-  * **Múltiplas Camadas de Verificação:** Implementa quatro camadas de verificação (Cooldown por ID, Sobreposição Espacial, Similaridade de Embeddings e Confiança) para reduzir falsos positivos.
+  * **Múltiplas Camadas de Verificação:** Implementa 3 camadas de verificação (Cooldown, Similaridade de Embeddings e Confiança).
   * **Histórico de Embeddings:** Mantém um histórico de embeddings para cada objeto rastreado, melhorando a identificação consistente ao longo do tempo.
 
 ## ⚙️ Pré-requisitos
@@ -120,7 +119,6 @@ Você pode ajustar as seguintes configurações diretamente no código `app.py`:
   * **Configurações:** Recomenda-se fortemente que o sistema primeiro seja testado sem enviar e-mails, pois dependendo dos valores configurados nas variáveis abaixo, o sistema pode enviar diversos e-mails e com isso o google bloquear sua conta.
   * **`CONFIG_CLASSES`:** Define as classes de objetos a serem detectadas, o tempo de cooldown para notificações e a cor das caixas delimitadoras.
   * **`CONFIANCA_MINIMA`:**  Define o nível mínimo de confiança para que uma detecção seja considerada válida.
-  * **`IOU_THRESHOLD`:** Limiar de Intersecção sobre União (IoU) para determinar sobreposição espacial entre detecções.
   * **`SIMILARIDADE_THRESHOLD`:** Limiar de similaridade de cosseno para comparação de embeddings.
   * **`HISTORICO_EMBEDDINGS`:** Número de embeddings históricos armazenados por ID de objeto para verificação de similaridade.
   * **`MODELO_CAMINHO`:** Caminho para o arquivo do modelo YOLO (`best.pt`).
