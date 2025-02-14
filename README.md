@@ -68,7 +68,7 @@ Siga os passos abaixo para configurar o ambiente e executar o projeto:
           * **Importante:** Para utilizar a notificação por e-mail (Gmail), é necessário configurar o acesso de autenticação de dois fatores no e-mail do remetente na sua respectiva conta Google e gerar uma "Senha de app". **Tenha cuidado com a segurança das suas credenciais de e-mail.**
       
       * Links: 
-        ([MyAcconut Google](https://myaccount.google.com))
+        ([MyAccount Google](https://myaccount.google.com))
         ([Gerenciar Senhas de app Google](https://myaccount.google.com/apppasswords))
 
 5.  **Arquivos de Modelo YOLO e Treinamento:**

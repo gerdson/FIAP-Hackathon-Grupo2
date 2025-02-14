@@ -239,24 +239,6 @@ def processar_video(fonte_video: Any, webcam: bool = False):
         frame_anotado_rgb = cv2.cvtColor(frame_anotado, cv2.COLOR_BGR2RGB)  # Converter para RGB para Streamlit
         yield frame_anotado_rgb, mensagem_status
         
-        #if (resultados[0].boxes.conf >= CONFIANCA_MINIMA).all():
-
-            #frame_anotado = (
-            #    resultados[0].plot()
-            #    if resultados
-            #    and isinstance(resultados, list)
-            #    and resultados[0] is not None
-            #    and hasattr(resultados[0], "plot")
-            #    and resultados[0].plot() is not None
-            #    else frame
-            #)  # Anotar o frame (se resultados e plot() não forem None)
-            #frame_anotado_rgb = cv2.cvtColor(frame_anotado, cv2.COLOR_BGR2RGB)  # Converter para RGB para Streamlit
-            #yield frame_anotado_rgb, mensagem_status
-
-        #else:
-        #     frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-        #     yield frame, mensagem_status
-
     cap.release()
 
 

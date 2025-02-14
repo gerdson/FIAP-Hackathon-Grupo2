@@ -5,3 +5,4 @@ opencv-python==4.11.0.86
 numpy==2.1.1
 torch==2.6.0
 python-dotenv==1.0.1
+mediapipe==0.10.21
